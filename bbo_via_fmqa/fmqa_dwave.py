@@ -9,7 +9,7 @@ import datetime
 
 # Helper and module imports
 import read_grid
-from ml_surrogate import train_surrogate_model, print_final_equation
+from bbo_via_fmqa.FM_surrogate import train_surrogate_model, print_final_equation
 from ising_machine import solve_surrogate_dwave
 
 # ============================================================
