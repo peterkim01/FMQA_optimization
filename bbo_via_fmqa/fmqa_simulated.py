@@ -1,5 +1,6 @@
 from datetime import datetime
 import sys, os
+import time
 import csv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fmqa")))
 
@@ -9,7 +10,7 @@ import random
 
 # Helper and module imports
 import read_grid
-from bbo_via_fmqa.FM_surrogate import train_surrogate_model, print_final_equation
+from FM_surrogate import train_surrogate_model, print_final_equation
 from ising_machine import solve_surrogate_SA
 from dimod import SimulatedAnnealingSampler
 
@@ -17,16 +18,19 @@ from dimod import SimulatedAnnealingSampler
 # path = path/to/your/dataset.csv
 # path = "./bbo_via_fmqa/dataset/alpine2_30x30.csv" # Change this to your dataset path
 # path = "./qhd_2D_graphs/alpine2_30x30.csv"
-path = "./qhd_2D_graphs/easom_30x30.csv"
+path = os.environ.get("FMQA_DATASET", "./qhd_2D_graphs/ackley_30x30.csv")
+
 graphtype = os.path.splitext(os.path.basename(path))[0]
 grid, obj_min, obj_max, x_bound, y_bound = read_grid.load_grid(filename=path)
 print(f"Grid loaded: {len(grid)} points, x in [0,{x_bound}], y in [0,{y_bound}]")
 print(f"Objective range: [{obj_min}, {obj_max}]")
 
 # --- Parameters ---
-max_cycles = 1000000
-convergence_patience = 20
+max_cycles = 150
+convergence_patience = int(len(grid) * 0.03) 
 sampler = SimulatedAnnealingSampler()
+
+start_time = time.perf_counter()
 
 # print(grid)
 
@@ -54,6 +58,7 @@ print(f"\nDataset split: {len(train_points)} training points, {len(test_points)}
 # --- Initial dataset (from training split) ---
 evaluated_points = set(train_points)
 xs = [read_grid.coord_bits(dx, dy, x_bound, y_bound) for dx, dy in train_points]
+x_vectors = [[int(bit) for bit in b] for b in xs]
 ys = [scale_value(evaluate(dx, dy)) for dx, dy in train_points]
 
 # --- Tracking and Convergence ---
@@ -71,7 +76,7 @@ for t in range(max_cycles):
     print(f"Cycle {t+1}: best so far = {best_val_raw} at {best_coord}")
 
     # Train surrogate model
-    fm = train_surrogate_model(xs, ys)
+    fm = train_surrogate_model(xs, ys, x_vectors=x_vectors)
     final_model = fm
 
     # Solve surrogate to get candidate
@@ -152,7 +157,9 @@ for t in range(max_cycles):
     if obj_val_scaled == np.inf:
         obj_val_scaled = 1.1
 
-    xs.append(read_grid.coord_bits(px, py, x_bound, y_bound))
+    new_bits = read_grid.coord_bits(px, py, x_bound, y_bound)
+    xs.append(new_bits)
+    x_vectors.append([int(bit) for bit in new_bits])
     ys.append(obj_val_scaled)
 
     history.append(best_val_raw)
@@ -203,9 +210,21 @@ if loop_records:
         for rec in loop_records:
             writer.writerow(rec)
 
+        runtime_seconds = time.perf_counter() - start_time
+        writer.writerow({
+            "cycle": "runtime_sec",
+            "px": "",
+            "py": "",
+            "objective": runtime_seconds,
+            "best_val": "",
+            "evaluated_count": "",
+            "no_improvement_count": "",
+            "status": "runtime_seconds",
+        })
+
     print(f"\nFMQA loop log written to: {csv_path}")
 else:
-    print("\nNo loop records to write (loop did not run?).")
+    print("\nNo loop records to write.")
     
 # --- Visualization ---
 x_vals = np.arange(x_bound + 1)
@@ -238,4 +257,9 @@ plt.xlabel("x coordinate")
 plt.ylabel("y coordinate")
 plt.legend(loc="upper left")
 plt.tight_layout()
-plt.show()
+
+# Save the generated plot to ./figures_output
+os.makedirs("figures_output", exist_ok=True)
+fig_save_path = os.path.join("figures_output", f"{graphtype}_plot_{timestamp}.png")
+plt.gcf().savefig(fig_save_path, dpi=300, bbox_inches="tight")
+print(f"Figure saved to: {fig_save_path}")

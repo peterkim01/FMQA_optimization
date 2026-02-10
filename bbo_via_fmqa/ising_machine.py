@@ -329,7 +329,7 @@ def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, gr
         (x, y) or (None, None)
     """
     try:
-        sampleset = sampler.sample(fm_model, num_reads=100)
+        sampleset = sampler.sample(fm_model, num_reads=50)
     except Exception as e:
         print(f"[solve_surrogate_SA] Sampler error: {e}")
         return None, None
