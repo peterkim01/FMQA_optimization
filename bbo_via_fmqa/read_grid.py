@@ -38,6 +38,42 @@ def load_grid(filename):
     return grid_data, x_min, x_max, x_bound, y_bound
 
 
+def load_grid_3d(filename):
+    """
+    Load 3D grid data from CSV.
+    Expected CSV columns: "x", "y", "z", "Objective".
+    Returns a dictionary mapping (x, y, z) tuples to the objective value.
+    """
+    grid_data = {}
+    x_bound = 0
+    y_bound = 0
+    z_bound = 0
+
+    with open(filename, "r") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                x_val = int(row["x"])
+                y_val = int(row["y"])
+                z_val = int(row["z"])
+                obj_val = float(row["Objective"])
+                grid_data[(x_val, y_val, z_val)] = obj_val
+                if x_val > x_bound:
+                    x_bound = x_val
+                if y_val > y_bound:
+                    y_bound = y_val
+                if z_val > z_bound:
+                    z_bound = z_val
+            except Exception as e:
+                print("Skipping row due to error:", e)
+                continue
+
+    finite_values = [v for v in grid_data.values() if not np.isnan(v)]
+    x_min = min(finite_values) if finite_values else None
+    x_max = max(finite_values) if finite_values else None
+    return grid_data, x_min, x_max, x_bound, y_bound, z_bound
+
+
 # Integer to binary weighted bit encoding
 def int_to_bits(n: int, upper: int, lsb_first: bool = False):
     """
@@ -78,6 +114,27 @@ def bits_to_int(bits: str, lsb_first: bool = False):
     return int(x_bits, 2), int(y_bits, 2)
 
 
+def bits_to_int_3d(bits: str, x_max: int, y_max: int, z_max: int, lsb_first: bool = False):
+    """
+    Decode a binary string into (x, y, z) using bounds to determine bit lengths.
+    """
+    if lsb_first:
+        bits = bits[::-1]
+
+    x_len = int(np.ceil(np.log2(x_max + 1)))
+    y_len = int(np.ceil(np.log2(y_max + 1)))
+    z_len = int(np.ceil(np.log2(z_max + 1)))
+
+    if len(bits) < x_len + y_len + z_len:
+        bits = bits.rjust(x_len + y_len + z_len, "0")
+
+    x_bits = bits[:x_len]
+    y_bits = bits[x_len:x_len + y_len]
+    z_bits = bits[x_len + y_len:x_len + y_len + z_len]
+
+    return int(x_bits, 2), int(y_bits, 2), int(z_bits, 2)
+
+
 def coord_bits(x: int, y: int,
                x_max: int, y_max: int,
                lsb_first: bool = False):
@@ -89,6 +146,20 @@ def coord_bits(x: int, y: int,
     x_bits = int_to_bits(x, x_max, lsb_first)
     y_bits = int_to_bits(y, y_max, lsb_first)
     all_bits = x_bits + y_bits
+    return ''.join(str(bit) for bit in all_bits)
+
+
+def coord_bits_3d(x: int, y: int, z: int,
+                  x_max: int, y_max: int, z_max: int,
+                  lsb_first: bool = False):
+    """
+    Given (x, y, z) and their maxima, return a string of concatenated bits:
+    (bits for x + bits for y + bits for z)
+    """
+    x_bits = int_to_bits(x, x_max, lsb_first)
+    y_bits = int_to_bits(y, y_max, lsb_first)
+    z_bits = int_to_bits(z, z_max, lsb_first)
+    all_bits = x_bits + y_bits + z_bits
     return ''.join(str(bit) for bit in all_bits)
 
 # PENALTY = 1e6  # adjust this penalty as appropriate
@@ -111,7 +182,7 @@ def obj_funct(x, grid_data):
     # Check that x_int and y_int are numbers (optional check)
     if not isinstance(x_int, (int, float)) or not isinstance(y_int, (int, float)):
         return PENALTY
-    
+
     # If the point exists in the grid, check its objective value.
     if (x_int, y_int) in grid_data:
         obj_val = grid_data[(x_int, y_int)]
@@ -123,6 +194,25 @@ def obj_funct(x, grid_data):
     else:
         # If the point is not in the grid, return the penalty.
         return PENALTY
+
+
+def obj_funct_3d(x, grid_data):
+    """
+    Objective lookup for 3D grid data.
+    """
+    x_int = int(round(x[0]))
+    y_int = int(round(x[1]))
+    z_int = int(round(x[2]))
+
+    if not all(isinstance(v, (int, float)) for v in (x_int, y_int, z_int)):
+        return PENALTY
+
+    if (x_int, y_int, z_int) in grid_data:
+        obj_val = grid_data[(x_int, y_int, z_int)]
+        if np.isnan(obj_val):
+            return PENALTY
+        return obj_val
+    return PENALTY
     
     
 def scale_point(x, y, grid_data, obj_min, obj_max):
@@ -145,9 +235,10 @@ def scale_point(x, y, grid_data, obj_min, obj_max):
     if raw_val == np.inf:
         return 1.0
     else:
-      delta = raw_val - obj_min
-      diff = obj_max - obj_min
-      scaled = -1 + delta / diff
-      return float(scaled)
+        delta = raw_val - obj_min
+        diff = obj_max - obj_min
+        scaled = -1 + delta / diff
+        return float(scaled)
+    
 
 

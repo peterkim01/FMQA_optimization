@@ -18,7 +18,7 @@ from dimod import SimulatedAnnealingSampler
 # path = path/to/your/dataset.csv
 # path = "./bbo_via_fmqa/dataset/alpine2_30x30.csv" # Change this to your dataset path
 # path = "./qhd_2D_graphs/alpine2_30x30.csv"
-path = os.environ.get("FMQA_DATASET", "./qhd_2D_graphs/ackley_30x30.csv")
+path = os.environ.get("FMQA_DATASET", "./qhd_2D_graphs/alpine1_30x30.csv")
 
 graphtype = os.path.splitext(os.path.basename(path))[0]
 grid, obj_min, obj_max, x_bound, y_bound = read_grid.load_grid(filename=path)
@@ -27,12 +27,9 @@ print(f"Objective range: [{obj_min}, {obj_max}]")
 
 # --- Parameters ---
 max_cycles = 150
-convergence_patience = int(len(grid) * 0.03) 
+convergence_patience = int(len(grid) * 0.01) 
 sampler = SimulatedAnnealingSampler()
-
 start_time = time.perf_counter()
-
-# print(grid)
 
 # --- Helper Functions ---
 def evaluate(x, y):
@@ -45,29 +42,41 @@ def scale_value(y_val):
         return np.inf
     return (y_val - obj_min) / (obj_max - obj_min)
 
-# --- Create Training and Testing Split (70/30) ---
+# --- Blackbox data (no train/test split) ---
 all_feasible_points = [p for p, v in grid.items() if not np.isnan(v)]
 random.shuffle(all_feasible_points)
 
-split_index = int(0.7 * len(all_feasible_points))
-train_points = all_feasible_points[:split_index]
-test_points = all_feasible_points[split_index:]
+print(f"\nTotal feasible points: {len(all_feasible_points)}")
+print(f"\nConvergence patience set to {convergence_patience}")
 
-print(f"\nDataset split: {len(train_points)} training points, {len(test_points)} testing points.")
+# --- Initial dataset (blackbox start) ---
+start_point = random.choice(all_feasible_points)
+start_val_raw = evaluate(*start_point)
 
-# --- Initial dataset (from training split) ---
-evaluated_points = set(train_points)
-xs = [read_grid.coord_bits(dx, dy, x_bound, y_bound) for dx, dy in train_points]
-x_vectors = [[int(bit) for bit in b] for b in xs]
-ys = [scale_value(evaluate(dx, dy)) for dx, dy in train_points]
+evaluated_points = {start_point}
+xs = [read_grid.coord_bits(start_point[0], start_point[1], x_bound, y_bound)]
+x_vectors = [[int(bit) for bit in xs[0]]]
+ys = [scale_value(start_val_raw)]
 
 # --- Tracking and Convergence ---
-best_val_raw = np.inf
-best_coord = None
-history = []
+best_val_raw = start_val_raw
+best_coord = start_point
+history = [best_val_raw]
 no_improvement_count = 0
 
-loop_records = []
+loop_records = [
+    {
+        "cycle": 0,
+        "px": start_point[0],
+        "py": start_point[1],
+        "objective": start_val_raw,
+        "best_val": best_val_raw,
+        "evaluated_count": len(evaluated_points),
+        "no_improvement_count": no_improvement_count,
+        "status": "initial_random",
+    }
+]
+
 # --- FMQA Loop ---
 final_model = None
 
@@ -133,9 +142,6 @@ for t in range(max_cycles):
         "no_improvement_count": no_improvement_count,
         "status": "evaluated",
     })
-
-    print(f"Proposed ({px},{py}) -> objective {obj_val_raw}")
-
     # --- Print objective every iteration (even if not best) ---
     if np.isfinite(obj_val_raw):
         print(f"Cycle {t+1}: objective = {obj_val_raw:.6f}, current best = {best_val_raw:.6f}")
@@ -151,6 +157,9 @@ for t in range(max_cycles):
     else:
         print("No improvement this iteration.")
         no_improvement_count += 1
+        if no_improvement_count >= convergence_patience:
+            print(f"\nConvergence reached after {t+1} cycles. Stopping.")
+            break
 
     # --- Scale and append data for next iteration ---
     obj_val_scaled = scale_value(obj_val_raw)
@@ -175,17 +184,13 @@ if t == max_cycles - 1:
 print(f"\n--- Final Results ---")
 print(f"Best objective found by FMQA = {best_val_raw} at {best_coord}")
 print(f"The known global minimum for the entire dataset is = {obj_min}")
-
-min_in_test = min(grid[p] for p in test_points)
-print(f"The best value in the unseen 30% test set was = {min_in_test}")
-
-if best_val_raw <= min_in_test:
-    print("SUCCESS: The algorithm found a value as good or better than the best in the test set.")
-else:
-    print("INFO: The algorithm did not find a value better than the best in the test set.")
+true_best_coord = min(grid, key=grid.get)
+print(f"Global minimum is at {true_best_coord} with objective {grid[true_best_coord]}")
 
 if final_model:
     print_final_equation(final_model)
+
+found_optimal = best_val_raw <= obj_min
 
 # WRITE CSV LOG (UNIQUE FILE)
 
@@ -221,6 +226,16 @@ if loop_records:
             "no_improvement_count": "",
             "status": "runtime_seconds",
         })
+        writer.writerow({
+            "cycle": "found_optimal",
+            "px": "",
+            "py": "",
+            "objective": found_optimal,
+            "best_val": best_val_raw,
+            "evaluated_count": len(evaluated_points),
+            "no_improvement_count": no_improvement_count,
+            "status": "summary",
+        })
 
     print(f"\nFMQA loop log written to: {csv_path}")
 else:
@@ -241,11 +256,13 @@ plt.title("FMQA Optimization")
 im = plt.imshow(Z, origin="lower", cmap="cividis", aspect="auto")
 plt.colorbar(im, label="Objective Value")
 
-# Plot training/testing points
-train_x, train_y = zip(*train_points)
-test_x, test_y = zip(*test_points)
-plt.scatter(train_x, train_y, c="white", edgecolors="black", s=40, label="Training Points")
-plt.scatter(test_x, test_y, c="gray", edgecolors="black", s=40, label="Testing Points")
+# Plot evaluated points as numbered labels (1 = first evaluated)
+eval_sequence = [
+    (rec["px"], rec["py"]) for rec in loop_records
+    if isinstance(rec.get("cycle"), int) and rec.get("status") in {"initial_random", "evaluated"}
+]
+for idx, (x, y) in enumerate(eval_sequence, start=1):
+    plt.text(x, y, str(idx), color="white", fontsize=7, ha="center", va="center")
 
 # Plot best found and true global minimum
 if best_coord is not None:

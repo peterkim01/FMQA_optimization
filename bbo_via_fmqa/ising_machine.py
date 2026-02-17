@@ -379,4 +379,62 @@ def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, gr
     return None, None
 
 
+def solve_surrogate_SA_3d(fm_model, x_bound, y_bound, z_bound, evaluated_points, sampler, grid):
+    """
+    Propose next (x, y, z) point using simulated annealing for 3D grids.
+
+    Returns:
+        (x, y, z) or (None, None, None)
+    """
+    try:
+        sampleset = sampler.sample(fm_model, num_reads=50)
+    except Exception as e:
+        print(f"[solve_surrogate_SA_3d] Sampler error: {e}")
+        return None, None, None
+
+    candidates = []
+
+    for sample, energy in sampleset.data(['sample', 'energy']):
+        bitlist = []
+        for i in sorted(sample.keys()):
+            v = sample[i]
+            if v in (-1, 1):
+                bit = 0 if v == -1 else 1
+            else:
+                bit = int(v)
+            bitlist.append(bit)
+
+        bitstring = "".join(map(str, bitlist))
+
+        try:
+            cand_x, cand_y, cand_z = read_grid.bits_to_int_3d(
+                bitstring, x_bound, y_bound, z_bound, lsb_first=False
+            )
+        except Exception:
+            continue
+
+        if not (0 <= cand_x <= x_bound and 0 <= cand_y <= y_bound and 0 <= cand_z <= z_bound):
+            continue
+
+        if (cand_x, cand_y, cand_z) not in grid:
+            continue
+
+        val = grid[(cand_x, cand_y, cand_z)]
+        if val is None or not np.isfinite(val):
+            continue
+
+        if (cand_x, cand_y, cand_z) in evaluated_points:
+            continue
+
+        candidates.append((cand_x, cand_y, cand_z, energy))
+
+    if candidates:
+        cand_x, cand_y, cand_z, _ = min(candidates, key=lambda t: t[3])
+        print(f"[solve_surrogate_SA_3d] New candidate from SA: ({cand_x}, {cand_y}, {cand_z})")
+        return cand_x, cand_y, cand_z
+
+    print("[solve_surrogate_SA_3d] No valid new candidate found.")
+    return None, None, None
+
+
 
