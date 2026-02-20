@@ -142,7 +142,7 @@ for t in range(max_cycles):
         "no_improvement_count": no_improvement_count,
         "status": "evaluated",
     })
-    # --- Print objective every iteration (even if not best) ---
+    # --- Print objective every iteration ---
     if np.isfinite(obj_val_raw):
         print(f"Cycle {t+1}: objective = {obj_val_raw:.6f}, current best = {best_val_raw:.6f}")
     else:
@@ -174,8 +174,6 @@ for t in range(max_cycles):
     history.append(best_val_raw)
     print(f"No improvement for {no_improvement_count} consecutive cycles.")
     print(f"Evaluated so far: {len(evaluated_points)} / total {len(grid)}")
-
-    
 
 if t == max_cycles - 1:
     print(f"\nMax cycles reached without convergence.")

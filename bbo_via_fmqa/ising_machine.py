@@ -356,15 +356,12 @@ def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, gr
         # Bounds check
         if not (0 <= cand_x <= x_bound and 0 <= cand_y <= y_bound):
             continue
-
         # Grid membership
         if (cand_x, cand_y) not in grid:
             continue
-
         val = grid[(cand_x, cand_y)]
         if val is None or not np.isfinite(val):
             continue
-
         if (cand_x, cand_y) in evaluated_points:
             continue
 

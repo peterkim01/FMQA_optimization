@@ -26,7 +26,6 @@ def train_surrogate_model(xs, ys, num_epoch=300, learning_rate=1.0e-2, x_vectors
 
     # Train and return the model
     fm = FMBQM.from_data(x=x_vectors_np, y=y_values_np, num_epoch=num_epoch, learning_rate=learning_rate)
-    
     return fm
 
 def print_final_equation(fm_model):
