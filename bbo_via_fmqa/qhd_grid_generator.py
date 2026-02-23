@@ -120,7 +120,7 @@ GRAPH_SPECS: Dict[str, Tuple[Callable[[np.ndarray, np.ndarray], np.ndarray], Tup
 }
 
 
-def make_csv(x_bound: int, y_bound: int, graph_type: str, out_dir: str = "./dataset") -> str:
+def make_csv(x_bound: int, y_bound: int, graph_type: str, out_dir: str = "./qhd_2D_graphs") -> str:
     if graph_type not in GRAPH_SPECS:
         raise ValueError(f"Unknown graph_type='{graph_type}'. Options: {sorted(GRAPH_SPECS)}")
 
