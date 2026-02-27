@@ -23,7 +23,7 @@ Use editable installs so local source changes are imported directly:
 bash scripts/setup_local_editable.sh
 ```
 
-Then run scripts from `bbo_via_fmqa/` (or with `python -m ...`) without `sys.path.insert(...)` hacks.
+Then run scripts from `bbo_via_fmqa/` (or with `python -m ...`)
 
 ---
 
