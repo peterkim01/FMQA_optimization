@@ -21,7 +21,7 @@ setup(
         "dimod>=0.12.0",
         "pandas>=1.3.0",
         "matplotlib>=3.5.0",
-        "fmqa>=0.0.1",
+        "fmqa>=0.0.2",
     ],
     # extras_require={
     #     "qci": [
