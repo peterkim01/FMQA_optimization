@@ -1,3 +1,12 @@
+"""
+Generate 2D grid datasets for several standard optimization test functions.
+
+The benchmark functions defined in this module are adapted from the
+Quantum Hamiltonian Descent reference page:
+https://jiaqileng.github.io/quantum-hamiltonian-descent/nonconvex2d.html
+
+"""
+
 import numpy as np
 import os
 from typing import Callable, Dict, Tuple

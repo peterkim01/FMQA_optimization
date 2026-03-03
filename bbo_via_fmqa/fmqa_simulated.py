@@ -2,6 +2,7 @@ from datetime import datetime
 import sys, os
 import time
 import csv
+import random
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fmqa")))
 
 import numpy as np
@@ -16,9 +17,6 @@ from dimod import SimulatedAnnealingSampler
 
 # --- Load Full Dataset ---
 # path = path/to/your/dataset.csv
-# path = "./bbo_via_fmqa/dataset/alpine2_30x30.csv" # Change this to your dataset path
-# path = "./qhd_2D_graphs/alpine2_30x30.csv"
-path = os.environ.get("FMQA_DATASET", "./qhd_2D_graphs/alpine1_30x30.csv")
 
 graphtype = os.path.splitext(os.path.basename(path))[0]
 grid, obj_min, obj_max, x_bound, y_bound = read_grid.load_grid(filename=path)
@@ -278,3 +276,5 @@ os.makedirs("figures_output", exist_ok=True)
 fig_save_path = os.path.join("figures_output", f"{graphtype}_plot_{timestamp}.png")
 plt.gcf().savefig(fig_save_path, dpi=300, bbox_inches="tight")
 print(f"Figure saved to: {fig_save_path}")
+
+

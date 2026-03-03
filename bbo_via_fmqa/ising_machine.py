@@ -15,21 +15,30 @@ def solve_surrogate_dwave(
     grid,
 ):
     """
-    Propose the next (x, y) point using a D-Wave hybrid solver
-    on the FM-based BQM. If D-Wave fails to produce a *new*
-    valid candidate, fall back to BQM-energy-based search over
-    remaining grid points.
+    Propose the next 2D candidate point from the surrogate model with D-Wave.
+
+    The function converts the factorization-machine surrogate into a binary
+    quadratic model, samples it with `LeapHybridSampler`, decodes sampled bit
+    strings into `(x, y)` coordinates, and returns the lowest-energy candidate
+    that is still inside the valid grid and has not been evaluated yet. If the
+    D-Wave samples do not contain a usable point, it falls back to scoring all
+    remaining grid points directly with the BQM energy and returns the best one.
 
     Args:
-        fm_model: trained FMBQM (subclass of dimod.BinaryQuadraticModel) or
-                  any object with .linear, .quadratic, .offset and .energy().
-        x_bound (int): max x index in the grid.
-        y_bound (int): max y index in the grid.
-        evaluated_points (set): set of (x, y) already evaluated.
-        grid (dict): mapping (x, y) -> objective value (float or NaN).
+        fm_model: Trained surrogate model represented as a
+            `dimod.BinaryQuadraticModel`, or an FM-like object that exposes
+            `.linear`, `.quadratic`, `.offset`, and `.energy()`.
+        x_bound (int): Maximum valid x index in the search grid.
+        y_bound (int): Maximum valid y index in the search grid.
+        evaluated_points (set[tuple[int, int]]): Coordinates that have already
+            been evaluated and therefore should not be proposed again.
+        grid (dict[tuple[int, int], float]): Mapping from grid coordinates to
+            objective values. Entries with non-finite values are treated as
+            invalid candidates.
 
     Returns:
-        (px, py): next candidate point, or (None, None) if nothing is left.
+        tuple[int | None, int | None]: The selected `(x, y)` coordinate, or
+        `(None, None)` if no valid unevaluated point can be produced.
     """
     import dimod
     from dwave.system import LeapHybridSampler
@@ -160,13 +169,28 @@ def solve_surrogate_dwave(
 
 def solve_surrogate_qci(fm_model, x_bound, y_bound, evaluated_points, grid):
     """
-    Solve the surrogate model via QCI Dirac-3 to propose the next (x, y) point.
+    Propose the next 2D candidate point by submitting the surrogate to QCI.
 
-    Fixes:
-        • Removes accidental (x,y) swap
-        • Enforces dataset constraint y ≤ x
-        • Filters out invalid/out-of-grid points
-        • Robustly parses QCI job results
+    The function rewrites the surrogate model as a quadratic polynomial with an
+    ancillary variable, sends that polynomial to the QCI Dirac-3 sampler,
+    parses the returned bit strings, decodes them into `(x, y)` coordinates, and
+    returns the first valid point that is inside the grid and has not already
+    been evaluated. It also enforces the dataset symmetry constraint `y <= x`
+    before validating the decoded point.
+
+    Args:
+        fm_model: Trained surrogate model with `.linear` and `.quadratic`
+            coefficient dictionaries describing the binary quadratic objective.
+        x_bound (int): Maximum valid x index in the search grid.
+        y_bound (int): Maximum valid y index in the search grid.
+        evaluated_points (set[tuple[int, int]]): Coordinates that have already
+            been sampled and should be skipped.
+        grid (dict[tuple[int, int], float]): Mapping from valid grid
+            coordinates to objective values. Non-finite entries are rejected.
+
+    Returns:
+        tuple[int | None, int | None]: A valid unevaluated `(x, y)` candidate,
+        or `(None, None)` if QCI returns no usable point or the API call fails.
     """
     import numpy as np
     from math import isfinite
@@ -315,18 +339,27 @@ def solve_surrogate_qci(fm_model, x_bound, y_bound, evaluated_points, grid):
 
 def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, grid):
     """
-    Propose next (x, y) point using simulated annealing.
-    Logic is aligned with solve_surrogate_dwave.
+    Propose the next 2D candidate point with a simulated annealing sampler.
+
+    The function samples the surrogate BQM, decodes each sampled bit string into
+    an `(x, y)` coordinate, filters out out-of-bounds, invalid, and previously
+    evaluated points, and returns the valid candidate with the lowest sampled
+    energy.
 
     Args:
-        fm_model: trained FM BQM
-        x_bound, y_bound: grid bounds
-        evaluated_points: already evaluated (x, y)
-        sampler: dimod sampler
-        grid: dataset grid (for validation)
+        fm_model: Trained surrogate binary quadratic model to be sampled.
+        x_bound (int): Maximum valid x index in the search grid.
+        y_bound (int): Maximum valid y index in the search grid.
+        evaluated_points (set[tuple[int, int]]): Coordinates that have already
+            been evaluated and should not be returned again.
+        sampler: Sampler object with a `.sample(...)` method compatible with the
+            supplied BQM, such as a dimod simulated annealing sampler.
+        grid (dict[tuple[int, int], float]): Mapping from grid coordinates to
+            objective values, used to reject invalid or missing points.
 
     Returns:
-        (x, y) or (None, None)
+        tuple[int | None, int | None]: The best valid `(x, y)` candidate found
+        in the sampled states, or `(None, None)` if none are usable.
     """
     try:
         sampleset = sampler.sample(fm_model, num_reads=50)
@@ -378,10 +411,29 @@ def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, gr
 
 def solve_surrogate_SA_3d(fm_model, x_bound, y_bound, z_bound, evaluated_points, sampler, grid):
     """
-    Propose next (x, y, z) point using simulated annealing for 3D grids.
+    Propose the next 3D candidate point with a simulated annealing sampler.
+
+    The function samples the surrogate BQM, decodes each sampled bit string into
+    an `(x, y, z)` coordinate for a 3D search space, filters invalid or already
+    evaluated points, and returns the valid candidate with the lowest sampled
+    energy.
+
+    Args:
+        fm_model: Trained surrogate binary quadratic model to be sampled.
+        x_bound (int): Maximum valid x index in the search grid.
+        y_bound (int): Maximum valid y index in the search grid.
+        z_bound (int): Maximum valid z index in the search grid.
+        evaluated_points (set[tuple[int, int, int]]): 3D coordinates that have
+            already been evaluated and should be skipped.
+        sampler: Sampler object with a `.sample(...)` method compatible with the
+            supplied BQM.
+        grid (dict[tuple[int, int, int], float]): Mapping from 3D coordinates to
+            objective values, used to validate decoded candidates.
 
     Returns:
-        (x, y, z) or (None, None, None)
+        tuple[int | None, int | None, int | None]: The best valid
+        `(x, y, z)` candidate found, or `(None, None, None)` if no usable point
+        is produced.
     """
     try:
         sampleset = sampler.sample(fm_model, num_reads=50)
@@ -432,6 +484,5 @@ def solve_surrogate_SA_3d(fm_model, x_bound, y_bound, z_bound, evaluated_points,
 
     print("[solve_surrogate_SA_3d] No valid new candidate found.")
     return None, None, None
-
 
 
