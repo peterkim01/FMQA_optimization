@@ -23,12 +23,12 @@ setup(
         "matplotlib>=3.5.0",
         "fmqa>=0.0.2",
     ],
-    # extras_require={
-    #     "qci": [
-    #         "qci-client>=0.1.0",
-    #         "eqc-models>=0.14.1",
-    #     ],
-    # ],
+    extras_require={
+        "qci": [
+            "qci-client>=0.1.0",
+            "eqc-models>=0.14.1",
+        ],
+    },
     python_requires=">=3.10",
     entry_points={
         "console_scripts": [
