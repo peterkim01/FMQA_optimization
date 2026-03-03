@@ -25,7 +25,7 @@ print(f"Objective range: [{obj_min}, {obj_max}]")
 
 # --- Parameters ---
 max_cycles = 150
-convergence_patience = int(len(grid) * 0.01) 
+convergence_patience = max(1, int(len(grid) * 0.01))
 sampler = SimulatedAnnealingSampler()
 start_time = time.perf_counter()
 
