@@ -11,10 +11,7 @@ setup(
         "read_grid",
         "ising_machine",
         "fmqa_simulated",
-        "fmqa_simulated_3D",
-        "adaptive_fmqa_simulated",
         "qhd_grid_generator",
-        "tester",
     ],
     install_requires=[
         "numpy>=1.21.0",

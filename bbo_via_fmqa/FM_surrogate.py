@@ -8,7 +8,8 @@ def train_surrogate_model(xs, ys, num_epoch=300, learning_rate=1.0e-2, x_vectors
     Args:
         xs (list of str): A list of binary strings representing the input points.
         ys (list of float): A list of scaled objective values.
-        num_epoch (int): The number of training epochs.
+        num_epoch (int): The number of training epochs. This has been adjusted fromm 1000 -> 300
+        to prevent overfitting and reduce training time. Adjust as needed based on convergence behavior.
         learning_rate (float): The learning rate for the optimizer.
 
     Returns:
