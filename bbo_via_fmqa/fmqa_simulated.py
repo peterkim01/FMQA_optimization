@@ -276,5 +276,3 @@ os.makedirs("figures_output", exist_ok=True)
 fig_save_path = os.path.join("figures_output", f"{graphtype}_plot_{timestamp}.png")
 plt.gcf().savefig(fig_save_path, dpi=300, bbox_inches="tight")
 print(f"Figure saved to: {fig_save_path}")
-
-
