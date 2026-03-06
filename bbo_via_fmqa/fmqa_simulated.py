@@ -24,7 +24,8 @@ print(f"Grid loaded: {len(grid)} points, x in [0,{x_bound}], y in [0,{y_bound}]"
 print(f"Objective range: [{obj_min}, {obj_max}]")
 
 # --- Parameters ---
-max_cycles = 1000000
+# Upper bound on optimization cycles; adjust upward for longer, more exhaustive runs if needed.
+max_cycles = 10000
 convergence_patience = 20
 sampler = SimulatedAnnealingSampler()
 
