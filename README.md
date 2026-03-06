@@ -23,7 +23,18 @@ Use editable installs so local source changes are imported directly:
 bash scripts/setup_local_editable.sh
 ```
 
-Then run scripts from `bbo_via_fmqa/` (or with `python -m ...`)
+The helper installs whichever local project directories are present. At
+minimum, this repo itself can be installed with:
+
+```bash
+python -m pip install --no-build-isolation -e ./bbo_via_fmqa
+```
+
+Then run scripts from `bbo_via_fmqa/`, for example:
+
+```bash
+python bbo_via_fmqa/fmqa_simulated.py
+```
 
 ---
 
@@ -72,9 +83,16 @@ The FMQA algorithm remains unchanged across backends; only the Hamiltonian solve
 ## Repository Structure
 
 ```text
-bbo_via_fmqa/
-├── fmqa/                 # Core FMQA optimization loop
-├── solvers/              # D-Wave, QCI, and simulated annealing backends
-├── examples/             # Example black-box optimization problems
-├── experiments/          # Experiment and benchmarking scripts
-└── README.md
+.
+├── README.md
+├── scripts/
+│   └── setup_local_editable.sh
+└── bbo_via_fmqa/
+    ├── FM_surrogate.py
+    ├── fmqa_simulated.py
+    ├── fmqa_dwave.py
+    ├── fmqa_qci.py
+    ├── ising_machine.py
+    ├── qhd_grid_generator.py
+    ├── read_grid.py
+    └── setup.py

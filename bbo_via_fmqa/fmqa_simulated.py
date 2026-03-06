@@ -24,8 +24,12 @@ print(f"Grid loaded: {len(grid)} points, x in [0,{x_bound}], y in [0,{y_bound}]"
 print(f"Objective range: [{obj_min}, {obj_max}]")
 
 # --- Parameters ---
-max_cycles = 150
-convergence_patience = max(1, int(len(grid) * 0.01))
+# Each cycle trains the surrogate once and evaluates at most one new point.
+max_cycles = int(os.environ.get("FMQA_MAX_CYCLES", "150"))
+convergence_patience_fraction = float(
+    os.environ.get("FMQA_CONVERGENCE_FRACTION", "0.01")
+)
+convergence_patience = max(1, int(len(grid) * convergence_patience_fraction))
 sampler = SimulatedAnnealingSampler()
 start_time = time.perf_counter()
 
@@ -45,7 +49,10 @@ all_feasible_points = [p for p, v in grid.items() if not np.isnan(v)]
 random.shuffle(all_feasible_points)
 
 print(f"\nTotal feasible points: {len(all_feasible_points)}")
-print(f"\nConvergence patience set to {convergence_patience}")
+print(
+    f"\nConvergence patience set to {convergence_patience} "
+    f"(fraction={convergence_patience_fraction})"
+)
 
 # --- Initial dataset (blackbox start) ---
 start_point = random.choice(all_feasible_points)

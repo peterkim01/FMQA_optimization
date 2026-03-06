@@ -12,6 +12,9 @@ def train_surrogate_model(xs, ys, num_epoch=300, learning_rate=1.0e-2, x_vectors
             from 1000 to 300 to lower training time and overfitting risk.
             Adjust it if convergence quality requires more iterations.
         learning_rate (float): The learning rate for the optimizer.
+        x_vectors (list[list[int]] | np.ndarray | None): Optional precomputed
+            binary feature vectors corresponding to `xs`. If omitted, the
+            vectors are rebuilt from the bitstrings in `xs`.
 
     Returns:
         FMBQM: A trained Factorization Machine Binary Quadratic Model.

@@ -1,6 +1,5 @@
 import read_grid
 import numpy as np
-from qci_client import QciClient
 from math import isfinite
 
 # QCI_TOKEN = 'your_api_token'
@@ -195,6 +194,7 @@ def solve_surrogate_qci(fm_model, x_bound, y_bound, evaluated_points, grid):
     import numpy as np
     from math import isfinite
     import read_grid
+    from qci_client import QciClient
 
     # ---------- 1. Convert FM model to homogeneous quadratic polynomial ----------
     num_original_vars = len(fm_model.linear)
@@ -337,6 +337,57 @@ def solve_surrogate_qci(fm_model, x_bound, y_bound, evaluated_points, grid):
     print("QCI returned solutions, but all were previously evaluated or invalid.")
     return None, None
 
+
+def _sample_bits_and_energy(sampleset):
+    """Yield decoded bit strings and energies from sampler results."""
+    for sample, energy in sampleset.data(['sample', 'energy']):
+        bitlist = []
+        for i in sorted(sample.keys()):
+            v = sample[i]
+            if v in (-1, 1):
+                bit = 0 if v == -1 else 1
+            else:
+                bit = int(v)
+            bitlist.append(bit)
+        yield "".join(map(str, bitlist)), energy
+
+
+def _solve_surrogate_sa_common(
+    fm_model,
+    sampler,
+    num_reads,
+    decode_fn,
+    is_valid_candidate,
+    log_prefix,
+):
+    """Shared SA candidate selection for both 2D and 3D decoders."""
+    try:
+        sampleset = sampler.sample(fm_model, num_reads=num_reads)
+    except Exception as e:
+        print(f"[{log_prefix}] Sampler error: {e}")
+        return None
+
+    candidates = []
+    for bitstring, energy in _sample_bits_and_energy(sampleset):
+        try:
+            candidate = decode_fn(bitstring)
+        except Exception:
+            continue
+
+        if not is_valid_candidate(candidate):
+            continue
+
+        candidates.append((candidate, energy))
+
+    if candidates:
+        candidate, _ = min(candidates, key=lambda item: item[1])
+        print(f"[{log_prefix}] New candidate from SA: {candidate}")
+        return candidate
+
+    print(f"[{log_prefix}] No valid new candidate found.")
+    return None
+
+
 def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, grid):
     """
     Propose the next 2D candidate point with a simulated annealing sampler.
@@ -361,62 +412,43 @@ def solve_surrogate_SA(fm_model, x_bound, y_bound, evaluated_points, sampler, gr
         tuple[int | None, int | None]: The best valid `(x, y)` candidate found
         in the sampled states, or `(None, None)` if none are usable.
     """
-    try:
-        sampleset = sampler.sample(fm_model, num_reads=50)
-    except Exception as e:
-        print(f"[solve_surrogate_SA] Sampler error: {e}")
-        return None, None
+    def decode_candidate(bitstring):
+        return read_grid.bits_to_int(bitstring, lsb_first=False)
 
-    candidates = []
-
-    for sample, energy in sampleset.data(['sample', 'energy']):
-        bitlist = []
-        for i in sorted(sample.keys()):
-            v = sample[i]
-            if v in (-1, 1):
-                bit = 0 if v == -1 else 1
-            else:
-                bit = int(v)
-            bitlist.append(bit)
-
-        bitstring = "".join(map(str, bitlist))
-
-        try:
-            cand_x, cand_y = read_grid.bits_to_int(bitstring, lsb_first=False)
-        except Exception:
-            continue
-
-        # Bounds check
+    def is_valid_candidate(candidate):
+        cand_x, cand_y = candidate
         if not (0 <= cand_x <= x_bound and 0 <= cand_y <= y_bound):
-            continue
-        # Grid membership
+            return False
         if (cand_x, cand_y) not in grid:
-            continue
+            return False
         val = grid[(cand_x, cand_y)]
         if val is None or not np.isfinite(val):
-            continue
+            return False
         if (cand_x, cand_y) in evaluated_points:
-            continue
+            return False
+        return True
 
-        candidates.append((cand_x, cand_y, energy))
-
-    if candidates:
-        cand_x, cand_y, _ = min(candidates, key=lambda t: t[2])
-        print(f"[solve_surrogate_SA] New candidate from SA: ({cand_x}, {cand_y})")
-        return cand_x, cand_y
-
-    print("[solve_surrogate_SA] No valid new candidate found.")
-    return None, None
+    candidate = _solve_surrogate_sa_common(
+        fm_model=fm_model,
+        sampler=sampler,
+        num_reads=50,
+        decode_fn=decode_candidate,
+        is_valid_candidate=is_valid_candidate,
+        log_prefix="solve_surrogate_SA",
+    )
+    if candidate is None:
+        return None, None
+    return candidate
 
 
 def solve_surrogate_SA_3d(fm_model, x_bound, y_bound, z_bound, evaluated_points, sampler, grid):
     """
     Propose the next 3D candidate point with a simulated annealing sampler.
 
-    The function samples the surrogate BQM, decodes each sampled bit string into
-    an `(x, y, z)` coordinate for a 3D search space, filters invalid or already
-    evaluated points, and returns the valid candidate with the lowest sampled
-    energy.
+    This wrapper reuses the same simulated annealing selection flow as the 2D
+    solver, but keeps a separate public function because 3D decoding requires
+    different bounds, a different bit-string decoder, and a different return
+    shape.
 
     Args:
         fm_model: Trained surrogate binary quadratic model to be sampled.
@@ -435,54 +467,33 @@ def solve_surrogate_SA_3d(fm_model, x_bound, y_bound, z_bound, evaluated_points,
         `(x, y, z)` candidate found, or `(None, None, None)` if no usable point
         is produced.
     """
-    try:
-        sampleset = sampler.sample(fm_model, num_reads=50)
-    except Exception as e:
-        print(f"[solve_surrogate_SA_3d] Sampler error: {e}")
-        return None, None, None
+    def decode_candidate(bitstring):
+        return read_grid.bits_to_int_3d(
+            bitstring, x_bound, y_bound, z_bound, lsb_first=False
+        )
 
-    candidates = []
-
-    for sample, energy in sampleset.data(['sample', 'energy']):
-        bitlist = []
-        for i in sorted(sample.keys()):
-            v = sample[i]
-            if v in (-1, 1):
-                bit = 0 if v == -1 else 1
-            else:
-                bit = int(v)
-            bitlist.append(bit)
-
-        bitstring = "".join(map(str, bitlist))
-
-        try:
-            cand_x, cand_y, cand_z = read_grid.bits_to_int_3d(
-                bitstring, x_bound, y_bound, z_bound, lsb_first=False
-            )
-        except Exception:
-            continue
-
+    def is_valid_candidate(candidate):
+        cand_x, cand_y, cand_z = candidate
         if not (0 <= cand_x <= x_bound and 0 <= cand_y <= y_bound and 0 <= cand_z <= z_bound):
-            continue
-
+            return False
         if (cand_x, cand_y, cand_z) not in grid:
-            continue
-
+            return False
         val = grid[(cand_x, cand_y, cand_z)]
         if val is None or not np.isfinite(val):
-            continue
-
+            return False
         if (cand_x, cand_y, cand_z) in evaluated_points:
-            continue
+            return False
+        return True
 
-        candidates.append((cand_x, cand_y, cand_z, energy))
-
-    if candidates:
-        cand_x, cand_y, cand_z, _ = min(candidates, key=lambda t: t[3])
-        print(f"[solve_surrogate_SA_3d] New candidate from SA: ({cand_x}, {cand_y}, {cand_z})")
-        return cand_x, cand_y, cand_z
-
-    print("[solve_surrogate_SA_3d] No valid new candidate found.")
-    return None, None, None
-
+    candidate = _solve_surrogate_sa_common(
+        fm_model=fm_model,
+        sampler=sampler,
+        num_reads=50,
+        decode_fn=decode_candidate,
+        is_valid_candidate=is_valid_candidate,
+        log_prefix="solve_surrogate_SA_3d",
+    )
+    if candidate is None:
+        return None, None, None
+    return candidate
 
