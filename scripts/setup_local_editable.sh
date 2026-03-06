@@ -3,9 +3,13 @@ set -euo pipefail
 
 # Run from repository root:
 #   bash scripts/setup_local_editable.sh
-python -m pip install --no-build-isolation -e ./fmqa
-python -m pip install --no-build-isolation -e ./ECP
-python -m pip install --no-build-isolation -e ./bbo_via_fmqa
+
+for project in fmqa ECP bbo_via_fmqa; do
+    if [[ -d "./${project}" ]]; then
+        python -m pip install --no-build-isolation -e "./${project}"
+    else
+        echo "Skipping ${project}: directory not present."
+    fi
+done
 
 echo "Install complete."
-

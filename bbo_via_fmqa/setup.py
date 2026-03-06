@@ -29,7 +29,6 @@ setup(
     python_requires=">=3.10",
     entry_points={
         "console_scripts": [
-            "fmqa-run-batch=tester:main",
             "fmqa-generate-grid=qhd_grid_generator:main",
         ]
     },
