@@ -3,7 +3,6 @@
 
 ## Overview
 
-
 **FMQA (Factorization Machine with Quantum Annealing)** is a **quantum–classical hybrid black-box optimization algorithm** designed to optimize expensive, discrete, or combinatorial objective functions where gradients or analytical forms are unavailable.
 
 The central idea of FMQA is to combine **surrogate modeling** with **annealing-based optimization**:
@@ -14,27 +13,6 @@ The central idea of FMQA is to combine **surrogate modeling** with **annealing-b
 - Newly evaluated samples are fed back into the surrogate, forming an iterative optimization loop.
 
 This repository provides an **end-to-end implementation of FMQA for black-box optimization**, with support for multiple annealing backends.
-
-## Local Setup
-
-Use editable installs so local source changes are imported directly:
-
-```bash
-bash scripts/setup_local_editable.sh
-```
-
-The helper installs whichever local project directories are present. At
-minimum, this repo itself can be installed with:
-
-```bash
-python -m pip install --no-build-isolation -e ./bbo_via_fmqa
-```
-
-Then run scripts from `bbo_via_fmqa/`, for example:
-
-```bash
-python bbo_via_fmqa/fmqa_simulated.py
-```
 
 ---
 
@@ -47,7 +25,7 @@ FMQA follows an iterative optimization loop:
    - Evaluate the black-box objective function.
 
 2. **Surrogate Modeling (Factorization Machine)**
-    - Train a Factorization Machine of the form:  
+   - Train a Factorization Machine of the form:  
 $\hat{f}(x) = w_0 + \sum_i w_i x_i + \sum_{i<j} \langle v_i, v_j \rangle x_i x_j$
 
    - This naturally corresponds to a quadratic objective suitable for QUBO/Ising formulation.
@@ -83,16 +61,9 @@ The FMQA algorithm remains unchanged across backends; only the Hamiltonian solve
 ## Repository Structure
 
 ```text
-.
-├── README.md
-├── scripts/
-│   └── setup_local_editable.sh
-└── bbo_via_fmqa/
-    ├── FM_surrogate.py
-    ├── fmqa_simulated.py
-    ├── fmqa_dwave.py
-    ├── fmqa_qci.py
-    ├── ising_machine.py
-    ├── qhd_grid_generator.py
-    ├── read_grid.py
-    └── setup.py
+bbo_via_fmqa/
+├── fmqa/                 # Core FMQA optimization loop
+├── solvers/              # D-Wave, QCI, and simulated annealing backends
+├── datasets/             # Example black-box optimization problems
+├── experiments/          # Experiment and benchmarking scripts
+└── README.md
