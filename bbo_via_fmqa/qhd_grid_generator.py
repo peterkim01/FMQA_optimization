@@ -11,6 +11,20 @@ import numpy as np
 import os
 from typing import Callable, Dict, Tuple
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "qhd_2D_graphs")
+
+
+def _display_path(path: str) -> str:
+    """Return a repo-relative path for logging when possible."""
+    abs_path = os.path.abspath(path)
+    try:
+        rel_path = os.path.relpath(abs_path, start=PROJECT_ROOT)
+    except ValueError:
+        return os.path.basename(abs_path)
+    return rel_path if not rel_path.startswith("..") else os.path.basename(abs_path)
+
 
 # Graphs
 # Ridges or Valleys
@@ -129,7 +143,12 @@ GRAPH_SPECS: Dict[str, Tuple[Callable[[np.ndarray, np.ndarray], np.ndarray], Tup
 }
 
 
-def make_csv(x_bound: int, y_bound: int, graph_type: str, out_dir: str = "./qhd_2D_graphs") -> str:
+def make_csv(
+    x_bound: int,
+    y_bound: int,
+    graph_type: str,
+    out_dir: str = DEFAULT_OUTPUT_DIR,
+) -> str:
     if graph_type not in GRAPH_SPECS:
         raise ValueError(f"Unknown graph_type='{graph_type}'. Options: {sorted(GRAPH_SPECS)}")
 
@@ -177,16 +196,20 @@ def make_csv(x_bound: int, y_bound: int, graph_type: str, out_dir: str = "./qhd_
 
 
 def main():
-    x_bound, y_bound = 30, 30
+    x_bound = int(os.environ.get("FMQA_GRID_X_BOUND", "100"))
+    y_bound = int(os.environ.get("FMQA_GRID_Y_BOUND", "100"))
+    out_dir = os.path.abspath(
+        os.environ.get("FMQA_GRID_OUTPUT_DIR", DEFAULT_OUTPUT_DIR)
+    )
 
     # # Generate ONE dataset:
-    # path = make_csv(x_bound, y_bound, graph_type="shubert")
-    # print(f"Saved: {path}")
+    # path = make_csv(x_bound, y_bound, graph_type="shubert", out_dir=out_dir)
+    # print(f"Saved: {_display_path(path)}")
 
     # Or generate ALL datasets:
     for gt in GRAPH_SPECS.keys():
-        path = make_csv(x_bound, y_bound, graph_type=gt)
-        print(f"Saved: {path}")
+        path = make_csv(x_bound, y_bound, graph_type=gt, out_dir=out_dir)
+        print(f"Saved: {_display_path(path)}")
 
 
 if __name__ == "__main__":

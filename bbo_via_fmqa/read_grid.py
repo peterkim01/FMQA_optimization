@@ -1,6 +1,20 @@
 import numpy as np
 import csv
 
+
+def _bit_length_for_upper(upper: int) -> int:
+    """Return the minimum number of bits needed to encode [0, upper]."""
+    if upper < 0:
+        raise ValueError(f"upper bound must be non-negative, got {upper}")
+    if upper == 0:
+        return 0
+    return int(np.ceil(np.log2(upper + 1)))
+
+
+def _bits_fragment_to_int(bits: str) -> int:
+    """Decode a binary fragment, treating the empty string as zero."""
+    return int(bits, 2) if bits else 0
+
 def load_grid(filename):
     """
     Load grid data from CSV.
@@ -11,7 +25,7 @@ def load_grid(filename):
     x_bound = 0
     y_bound = 0
     
-    with open(filename, "r") as f:
+    with open(filename, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
@@ -32,10 +46,10 @@ def load_grid(filename):
                 continue
 
     # Compute the minimum among finite objective values
-    finite_values = [v for v in grid_data.values() if not np.isnan(v)]
-    x_min = min(finite_values) if finite_values else None
-    x_max = max(finite_values) if finite_values else None
-    return grid_data, x_min, x_max, x_bound, y_bound
+    finite_values = [v for v in grid_data.values() if np.isfinite(v)]
+    obj_min = min(finite_values) if finite_values else None
+    obj_max = max(finite_values) if finite_values else None
+    return grid_data, obj_min, obj_max, x_bound, y_bound
 
 
 def load_grid_3d(filename):
@@ -49,7 +63,7 @@ def load_grid_3d(filename):
     y_bound = 0
     z_bound = 0
 
-    with open(filename, "r") as f:
+    with open(filename, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
@@ -68,10 +82,10 @@ def load_grid_3d(filename):
                 print("Skipping row due to error:", e)
                 continue
 
-    finite_values = [v for v in grid_data.values() if not np.isnan(v)]
-    x_min = min(finite_values) if finite_values else None
-    x_max = max(finite_values) if finite_values else None
-    return grid_data, x_min, x_max, x_bound, y_bound, z_bound
+    finite_values = [v for v in grid_data.values() if np.isfinite(v)]
+    obj_min = min(finite_values) if finite_values else None
+    obj_max = max(finite_values) if finite_values else None
+    return grid_data, obj_min, obj_max, x_bound, y_bound, z_bound
 
 
 # Integer to binary weighted bit encoding
@@ -83,18 +97,20 @@ def int_to_bits(n: int, upper: int, lsb_first: bool = False):
     if not (0 <= n <= upper):
         raise ValueError(f"value {n} outside [0, {upper}]")
 
-    m = int(np.ceil(np.log2(upper + 1)))
+    m = _bit_length_for_upper(upper)
     bits = [(n >> k) & 1 for k in range(m)]
     if not lsb_first:
         bits.reverse()
     return bits
 
-def bits_to_int(bits: str, lsb_first: bool = False):
+def bits_to_int(bits: str, x_max: int = None, y_max: int = None, lsb_first: bool = False):
     """
-    Split the binary string to two integers (x,y).
+    Decode a binary string into two integers (x, y).
 
     Parameters:
     - bits: str, binary string (e.g., '101001')
+    - x_max: int | None, optional maximum x value used to determine x bit width
+    - y_max: int | None, optional maximum y value used to determine y bit width
     - lsb_first: bool, if True, the least significant bit is first
 
     Returns:
@@ -107,11 +123,23 @@ def bits_to_int(bits: str, lsb_first: bool = False):
     if lsb_first:
         bits = bits[::-1]  # Reverse the bits if LSB first
 
-    mid = len(bits) // 2
-    x_bits = bits[:mid]
-    y_bits = bits[mid:]
+    if (x_max is None) != (y_max is None):
+        raise ValueError("x_max and y_max must both be provided or both be omitted")
 
-    return int(x_bits, 2), int(y_bits, 2)
+    if x_max is None and y_max is None:
+        mid = len(bits) // 2
+        x_bits = bits[:mid]
+        y_bits = bits[mid:]
+    else:
+        x_len = _bit_length_for_upper(x_max)
+        y_len = _bit_length_for_upper(y_max)
+        total_len = x_len + y_len
+        if len(bits) < total_len:
+            bits = bits.rjust(total_len, "0")
+        x_bits = bits[:x_len]
+        y_bits = bits[x_len:x_len + y_len]
+
+    return _bits_fragment_to_int(x_bits), _bits_fragment_to_int(y_bits)
 
 
 def bits_to_int_3d(bits: str, x_max: int, y_max: int, z_max: int, lsb_first: bool = False):
@@ -121,9 +149,9 @@ def bits_to_int_3d(bits: str, x_max: int, y_max: int, z_max: int, lsb_first: boo
     if lsb_first:
         bits = bits[::-1]
 
-    x_len = int(np.ceil(np.log2(x_max + 1)))
-    y_len = int(np.ceil(np.log2(y_max + 1)))
-    z_len = int(np.ceil(np.log2(z_max + 1)))
+    x_len = _bit_length_for_upper(x_max)
+    y_len = _bit_length_for_upper(y_max)
+    z_len = _bit_length_for_upper(z_max)
 
     if len(bits) < x_len + y_len + z_len:
         bits = bits.rjust(x_len + y_len + z_len, "0")
@@ -132,7 +160,11 @@ def bits_to_int_3d(bits: str, x_max: int, y_max: int, z_max: int, lsb_first: boo
     y_bits = bits[x_len:x_len + y_len]
     z_bits = bits[x_len + y_len:x_len + y_len + z_len]
 
-    return int(x_bits, 2), int(y_bits, 2), int(z_bits, 2)
+    return (
+        _bits_fragment_to_int(x_bits),
+        _bits_fragment_to_int(y_bits),
+        _bits_fragment_to_int(z_bits),
+    )
 
 
 def coord_bits(x: int, y: int,
@@ -186,8 +218,8 @@ def obj_funct(x, grid_data):
     # If the point exists in the grid, check its objective value.
     if (x_int, y_int) in grid_data:
         obj_val = grid_data[(x_int, y_int)]
-        # Return penalty if the objective is NaN.
-        if np.isnan(obj_val):
+        # Return penalty if the objective is not finite.
+        if not np.isfinite(obj_val):
             return PENALTY
         else:
             return obj_val
@@ -209,7 +241,7 @@ def obj_funct_3d(x, grid_data):
 
     if (x_int, y_int, z_int) in grid_data:
         obj_val = grid_data[(x_int, y_int, z_int)]
-        if np.isnan(obj_val):
+        if not np.isfinite(obj_val):
             return PENALTY
         return obj_val
     return PENALTY
@@ -237,8 +269,8 @@ def scale_point(x, y, grid_data, obj_min, obj_max):
     else:
         delta = raw_val - obj_min
         diff = obj_max - obj_min
+        if diff == 0:
+            return -1.0
         scaled = -1 + delta / diff
         return float(scaled)
     
-
-
